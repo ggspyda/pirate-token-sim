@@ -1,0 +1,1464 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Treasure Hunters // RNG Telemetry (Vue 3)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+      @keyframes chestShake {
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        25% { transform: translate(-4px, -2px) rotate(-2.2deg); }
+        50% { transform: translate(4px, 1px) rotate(2.2deg); }
+        75% { transform: translate(-2px, 2px) rotate(-1.2deg); }
+      }
+      @keyframes screenShock {
+        0%, 100% { transform: translate(0, 0); }
+        25% { transform: translate(-7px, 5px); }
+        50% { transform: translate(7px, -5px); }
+        75% { transform: translate(-4px, -3px); }
+      }
+      @keyframes shockwaveExpand {
+        0% { transform: scale(0.4); opacity: 1; border-width: 7px; }
+        100% { transform: scale(14); opacity: 0; border-width: 1px; }
+      }
+      @keyframes doubloonFall {
+        0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+        100% { transform: translateY(105vh) rotate(720deg); opacity: 0.15; }
+      }
+      @keyframes tokenRise {
+        0% { transform: translateY(50px) scale(0.35) rotateY(180deg); opacity: 0; }
+        100% { transform: translateY(0) scale(1) rotateY(0deg); opacity: 1; }
+      }
+      @keyframes floatSlow {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-8px); }
+      }
+      @keyframes shineSweep {
+        0% { transform: translateX(-150%) rotate(25deg); }
+        55%, 100% { transform: translateX(200%) rotate(25deg); }
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes spinSlow {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body class="bg-[#0b0f17] text-slate-100 font-sans selection:bg-amber-400 selection:text-slate-950 antialiased">
+    <div id="app"></div>
+
+    <!-- =====================================================================
+         Clean Vue 3 SFC-style <script setup> architecture mounted via runtime
+         compiler so this runs standalone on double-click or inside Vite SFCs.
+         ===================================================================== -->
+    <script type="text/x-template" id="app-template">
+      <div class="min-h-screen bg-[#0b0f17] text-slate-100">
+        <!-- Top Tactical HUD Bar -->
+        <header class="sticky top-0 z-30 bg-[#0b0f17]/95 backdrop-blur border-b border-slate-800">
+          <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-amber-400/15 border border-amber-400/40 flex items-center justify-center text-amber-300">
+                <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="9" cy="12" r="1" /><circle cx="15" cy="12" r="1" />
+                  <path d="M8 20v2h8v-2" /><path d="m12.5 17-.5-1-.5 1h1z" />
+                  <path d="M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20" />
+                </svg>
+              </div>
+
+              <div>
+                <div class="flex items-center gap-2">
+                  <h1 class="text-sm sm:text-base font-black tracking-tight uppercase text-white">
+                    Treasure Hunters // RNG Telemetry
+                  </h1>
+                  <span class="hidden sm:inline-block px-2 py-0.5 rounded font-mono text-[10px] bg-slate-800 text-cyan-300 border border-slate-700">
+                    VUE 3 // v2.5
+                  </span>
+                </div>
+
+                <div class="flex items-center gap-2 mt-1">
+                  <button
+                    @click="activeTab = 'sim'"
+                    :class="[
+                      'px-3 py-1 rounded font-mono text-xs font-bold uppercase transition cursor-pointer',
+                      activeTab === 'sim'
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'text-slate-400 hover:text-white bg-[#111827] border border-slate-800'
+                    ]"
+                  >
+                    Simulator
+                  </button>
+                  <button
+                    @click="switchToMathTab"
+                    :class="[
+                      'px-3 py-1 rounded font-mono text-xs font-bold uppercase transition cursor-pointer',
+                      activeTab === 'math'
+                        ? 'bg-cyan-400 text-slate-950'
+                        : 'text-slate-400 hover:text-white bg-[#111827] border border-slate-800'
+                    ]"
+                  >
+                    Math &amp; Why
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button
+                @click="triggerTestTokenDrop"
+                class="px-3 py-2 rounded-lg font-mono text-xs font-bold uppercase bg-[#111827] hover:bg-slate-800 text-amber-300 border border-amber-400/40 transition cursor-pointer flex items-center gap-1.5"
+              >
+                <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
+                </svg>
+                <span>Test Token Drop</span>
+              </button>
+
+              <button
+                @click="muted = !muted"
+                class="p-2 rounded-lg bg-[#111827] hover:bg-slate-800 border border-slate-800 text-slate-300 transition cursor-pointer"
+                :title="muted ? 'Unmute Audio' : 'Mute Audio'"
+                aria-label="Toggle Audio"
+              >
+                <svg v-if="muted" viewBox="0 0 24 24" class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 5 6 9H2v6h4l5 4V5Z" /><line x1="22" y1="9" x2="16" y2="15" /><line x1="16" y1="9" x2="22" y2="15" />
+                </svg>
+                <svg v-else viewBox="0 0 24 24" class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 5 6 9H2v6h4l5 4V5Z" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>
+              </button>
+
+              <button
+                @click="resetSession"
+                class="p-2 rounded-lg bg-[#111827] hover:bg-slate-800 border border-slate-800 text-slate-300 transition cursor-pointer"
+                title="Reset Session"
+                aria-label="Reset Session"
+              >
+                <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <!-- TAB 2: Math & Why -->
+        <section v-if="activeTab === 'math'" class="max-w-5xl mx-auto px-4 py-7 space-y-6 animate-[fadeIn_0.25s_ease-out]">
+          <div class="bg-[#111827] border border-slate-800 rounded-xl p-6 sm:p-8">
+            <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono text-xs mb-3">
+              <span>SYSTEM SPEC &amp; PROBABILITY MODEL</span>
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-white">
+              Why This Simulator Exists
+            </h2>
+            <p class="mt-2.5 text-sm text-slate-300 leading-relaxed max-w-3xl">
+              Human intuition is notoriously terrible at extreme tail probabilities. Seeing ten clips on X of someone pulling a Pirate Token on chest #35 creates heavy survivorship bias—you never see the 15,000 players who opened 25,000 chests and got zero. This app models Epic&apos;s published loot table as memoryless Bernoulli trials so you can watch the actual geometric distribution play out at 2,500 rolls/sec.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-5 space-y-3">
+              <h3 class="font-mono text-xs font-bold uppercase tracking-wider text-amber-300">
+                1. Geometric Distribution (No Pity Counter)
+              </h3>
+              <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Every chest is completely independent. Opening 95,000 chests with zero drops does not warm up your account—chest #95,001 still rolls <span class="font-mono text-white">1 / 137,500</span>. Cumulative odds after <span class="font-mono text-white">n</span> chests follow:
+              </p>
+              <div class="p-3 rounded-lg bg-[#0b0f17] border border-slate-800 font-mono text-xs text-cyan-300">
+                P(X &le; n) = 1 - (1 - p)^n
+              </div>
+              <ul class="text-xs text-slate-400 space-y-1.5 font-mono">
+                <li>• 50.0% coin-flip mark (1×): 95,308 chests</li>
+                <li>• 63.2% mean expectation (1×): 137,500 chests</li>
+                <li>• 24h nonstop solo farm (~240/hr): 5,760 chests (4.10% odds)</li>
+              </ul>
+            </div>
+
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-5 space-y-3">
+              <h3 class="font-mono text-xs font-bold uppercase tracking-wider text-rose-400">
+                2. Practical Farming Multipliers
+              </h3>
+              <ul class="space-y-2.5 text-xs sm:text-sm text-slate-300">
+                <li>
+                  <strong class="text-white">4-Stack Squad Sharing:</strong> Every eligible chest opened by a teammate triggers an independent roll for everyone in the squad who doesn&apos;t own the token yet—cutting your personal chest requirement by up to 4×.
+                </li>
+                <li>
+                  <strong class="text-white">Saturday Treasure Hours:</strong> Official 2-hour windows boost the token drop rate to <span class="font-mono text-cyan-300">1.5× (1 in 91,667)</span> and <span class="font-mono text-amber-300">2× (1 in 68,750)</span>, dropping the 50/50 mark to 47,654 chests.
+                </li>
+                <li>
+                  <strong class="text-white">Zero Account Bias:</strong> Account level, skin loadout, and Creative XP have zero effect on server-side BR chest RNG.
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="bg-[#111827] border border-slate-800 rounded-xl p-5 space-y-3">
+            <h3 class="font-mono text-xs font-bold uppercase tracking-wider text-cyan-300">
+              3. Engine Notes (Vue 3 Composition API)
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-300">
+              <div class="p-3 rounded-lg bg-[#0b0f17] border border-slate-800">
+                <div class="font-mono font-bold text-white mb-1">Delta-Time rAF Loop</div>
+                Auto-grind accumulates fractional rolls across <span class="font-mono text-cyan-300">requestAnimationFrame</span> ticks so 2,500/s runs smoothly without blocking the UI thread.
+              </div>
+              <div class="p-3 rounded-lg bg-[#0b0f17] border border-slate-800">
+                <div class="font-mono font-bold text-white mb-1">expm1 / log1p Precision</div>
+                Uses <span class="font-mono text-amber-300">-Math.expm1(n * Math.log1p(-p))</span> to prevent IEEE-754 underflow when computing tiny cumulative probabilities.
+              </div>
+              <div class="p-3 rounded-lg bg-[#0b0f17] border border-slate-800">
+                <div class="font-mono font-bold text-white mb-1">Procedural Web Audio</div>
+                Synthesizes chest latch thuds, harmonic item chimes, and the 4-stage Pirate Token brass reveal natively via <span class="font-mono text-emerald-300">AudioContext</span>.
+              </div>
+            </div>
+          </div>
+
+          <div class="flex justify-end">
+            <button
+              @click="activeTab = 'sim'"
+              class="px-5 py-2.5 rounded-lg font-mono text-xs font-bold uppercase tracking-wider bg-amber-400 hover:bg-amber-300 text-slate-950 transition cursor-pointer"
+            >
+              &larr; Return to Simulator
+            </button>
+          </div>
+        </section>
+
+        <!-- TAB 1: Main Chest Simulator -->
+        <main v-else class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <!-- Left 7 Columns -->
+          <div class="lg:col-span-7 flex flex-col gap-5">
+            <!-- Rate Window Selector -->
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-3.5">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-mono text-[11px] uppercase tracking-wider text-slate-400">
+                  Active Drop Rate Window
+                </span>
+                <span class="font-mono text-xs font-bold text-amber-300">
+                  Token Odds: {{ activeWindow.oddsLabel }}
+                </span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  v-for="w in windowOptions"
+                  :key="w.id"
+                  @click="windowId = w.id"
+                  :class="[
+                    'p-2.5 rounded-lg border text-left transition cursor-pointer',
+                    windowId === w.id
+                      ? 'bg-slate-800/90 border-amber-400/70 text-white'
+                      : 'bg-[#0b0f17] border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  ]"
+                >
+                  <div class="text-xs font-bold">{{ w.name }}</div>
+                  <div class="font-mono text-[11px] text-amber-300/90 mt-0.5">{{ w.oddsLabel }}</div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Interactive Chest Stage -->
+            <div class="relative bg-[#111827] border border-slate-800 rounded-xl p-6 flex flex-col items-center justify-between min-h-[415px] overflow-hidden">
+              <div class="w-full flex items-center justify-between font-mono text-xs">
+                <div class="px-3 py-1 rounded bg-[#0b0f17] border border-slate-800 text-slate-300">
+                  ROLL <span class="text-white font-bold tabular-nums">#{{ chestCount.toLocaleString() }}</span>
+                </div>
+                <div class="px-3 py-1 rounded bg-[#0b0f17] border border-slate-800 text-slate-400">
+                  SPACEBAR / CLICK
+                </div>
+              </div>
+
+              <!-- Chest Vector Button -->
+              <button
+                @click="openSingleChest"
+                class="group my-2 focus:outline-none cursor-pointer"
+                aria-label="Open Treasure Chest"
+              >
+                <div class="relative flex items-center justify-center w-60 h-60 sm:w-64 sm:h-64 select-none">
+                  <div
+                    :class="[
+                      'absolute inset-6 rounded-full blur-2xl transition-all duration-300',
+                      aura === 'gold'
+                        ? 'bg-amber-400/45 scale-125'
+                        : aura === 'rare'
+                        ? 'bg-cyan-400/40 scale-110'
+                        : isChestOpen
+                        ? 'bg-amber-300/25 scale-105'
+                        : 'bg-amber-500/15 scale-95 group-hover:bg-amber-400/25'
+                    ]"
+                  />
+
+                  <div v-if="isChestOpen" class="absolute -top-14 inset-x-4 h-44 pointer-events-none overflow-hidden flex justify-center">
+                    <div
+                      :class="['w-40 h-full bg-gradient-to-t opacity-85 animate-pulse', rayGradientClass]"
+                      style="clip-path: polygon(24% 100%, 76% 100%, 100% 0%, 0% 0%)"
+                    />
+                  </div>
+
+                  <svg
+                    viewBox="0 0 260 230"
+                    :class="[
+                      'w-full h-full drop-shadow-[0_18px_24px_rgba(0,0,0,0.7)] transition-transform duration-200',
+                      phase === 'shaking' ? 'animate-[chestShake_0.11s_infinite]' : 'group-hover:scale-[1.025]'
+                    ]"
+                  >
+                    <defs>
+                      <linearGradient id="hullWood" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#7c3f1d" />
+                        <stop offset="55%" stop-color="#54260f" />
+                        <stop offset="100%" stop-color="#351607" />
+                      </linearGradient>
+                      <linearGradient id="capWood" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#944b22" />
+                        <stop offset="100%" stop-color="#582810" />
+                      </linearGradient>
+                      <linearGradient id="brassTrim" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#fef08a" />
+                        <stop offset="45%" stop-color="#f59e0b" />
+                        <stop offset="85%" stop-color="#b45309" />
+                        <stop offset="100%" stop-color="#fde047" />
+                      </linearGradient>
+                      <radialGradient id="coreLight" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" :stop-color="aura === 'rare' ? '#e0f2fe' : '#fef9c3'" />
+                        <stop offset="65%" :stop-color="aura === 'rare' ? '#38bdf8' : '#facc15'" />
+                        <stop offset="100%" :stop-color="aura === 'rare' ? '#0284c7' : '#d97706'" />
+                      </radialGradient>
+                    </defs>
+
+                    <ellipse cx="130" cy="208" rx="92" ry="12" fill="rgba(0,0,0,0.55)" />
+
+                    <!-- Hull -->
+                    <path
+                      d="M42 115 L218 115 L208 196 C207 201 203 204 198 204 L62 204 C57 204 53 201 52 196 Z"
+                      fill="url(#hullWood)"
+                      stroke="#260f04"
+                      stroke-width="3"
+                    />
+                    <line x1="46" y1="145" x2="214" y2="145" stroke="#281005" stroke-width="2.5" />
+                    <line x1="49" y1="175" x2="211" y2="175" stroke="#281005" stroke-width="2.5" />
+
+                    <polygon v-if="isChestOpen" points="46,115 214,115 204,96 56,96" fill="url(#coreLight)" />
+
+                    <!-- Straps & Trim -->
+                    <path d="M38 113 L64 113 L71 204 L50 204 C46 204 44 201 44 196 Z" fill="url(#brassTrim)" stroke="#78350f" stroke-width="2" />
+                    <path d="M222 113 L196 113 L189 204 L210 204 C214 204 216 201 216 196 Z" fill="url(#brassTrim)" stroke="#78350f" stroke-width="2" />
+                    <rect x="48" y="192" width="164" height="12" rx="4" fill="url(#brassTrim)" stroke="#78350f" stroke-width="2" />
+
+                    <circle cx="53" cy="132" r="2.8" fill="#fef08a" />
+                    <circle cx="56" cy="162" r="2.8" fill="#fef08a" />
+                    <circle cx="207" cy="132" r="2.8" fill="#fef08a" />
+                    <circle cx="204" cy="162" r="2.8" fill="#fef08a" />
+
+                    <!-- Lid -->
+                    <g
+                      :style="{
+                        transformOrigin: '130px 112px',
+                        transform: isChestOpen ? 'translateY(-22px) scaleY(0.77)' : 'translateY(0px) scaleY(1)',
+                        transition: 'transform 0.24s cubic-bezier(0.22, 1, 0.36, 1)'
+                      }"
+                    >
+                      <path d="M36 114 C36 68 62 48 130 48 C198 48 224 68 224 114 Z" fill="url(#capWood)" stroke="#260f04" stroke-width="3" />
+                      <path d="M42 86 Q130 78 218 86" fill="none" stroke="#281005" stroke-width="2.5" />
+                      <path d="M35 114 C35 72 52 54 68 51 L64 114 Z" fill="url(#brassTrim)" stroke="#78350f" stroke-width="2" />
+                      <path d="M225 114 C225 72 208 54 192 51 L196 114 Z" fill="url(#brassTrim)" stroke="#78350f" stroke-width="2" />
+                      <path d="M112 48 L148 48 L152 114 L108 114 Z" fill="url(#brassTrim)" stroke="#78350f" stroke-width="2" />
+                      <rect x="34" y="104" width="192" height="14" rx="5" fill="url(#brassTrim)" stroke="#78350f" stroke-width="2" />
+                    </g>
+
+                    <!-- Lock Plate -->
+                    <g
+                      :style="{
+                        transform: isChestOpen ? 'translateY(-13px)' : 'translateY(0px)',
+                        transition: 'transform 0.24s cubic-bezier(0.22, 1, 0.36, 1)'
+                      }"
+                    >
+                      <rect x="108" y="95" width="44" height="46" rx="8" fill="url(#brassTrim)" stroke="#78350f" stroke-width="2.5" />
+                      <circle cx="130" cy="113" r="5.5" :fill="aura === 'rare' ? '#38bdf8' : '#fef08a'" />
+                      <path d="M126 116 L134 116 L136 129 L124 129 Z" :fill="aura === 'rare' ? '#38bdf8' : '#fef08a'" />
+                    </g>
+                  </svg>
+                </div>
+              </button>
+
+              <!-- Latest Drop Readout -->
+              <div class="w-full max-w-md min-h-[86px] flex items-center justify-center">
+                <div
+                  v-if="currentDrop"
+                  :key="`${currentDrop.index}-${currentDrop.name}`"
+                  :class="[
+                    'w-full rounded-lg p-3 border transition animate-[fadeIn_0.18s_ease-out]',
+                    currentDrop.isSpecial
+                      ? tierStyles[currentDrop.tier].card
+                      : 'bg-[#0b0f17] border-slate-800'
+                  ]"
+                >
+                  <div class="flex items-center gap-3">
+                    <div
+                      :class="[
+                        'w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 font-mono text-xs font-black',
+                        currentDrop.isSpecial
+                          ? 'bg-slate-900 border-amber-400/40 text-amber-300'
+                          : currentDrop.accent
+                      ]"
+                    >
+                      {{ currentDrop.badge }}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-2">
+                        <span
+                          :class="[
+                            'px-1.5 py-0.5 rounded font-mono text-[10px] uppercase tracking-wider',
+                            currentDrop.isSpecial
+                              ? tierStyles[currentDrop.tier].pill
+                              : 'bg-slate-800 text-slate-300'
+                          ]"
+                        >
+                          {{ currentDrop.isSpecial ? tierStyles[currentDrop.tier].tag : currentDrop.rarity }}
+                        </span>
+                        <span class="font-mono text-[11px] text-slate-500 tabular-nums">
+                          #{{ currentDrop.index.toLocaleString() }}
+                        </span>
+                      </div>
+                      <div class="text-sm font-bold text-white truncate mt-0.5">{{ currentDrop.name }}</div>
+                      <div v-if="currentDrop.detail" class="text-xs text-slate-400 truncate">{{ currentDrop.detail }}</div>
+                    </div>
+                  </div>
+
+                  <div v-if="burstNote" class="mt-2 pt-2 border-t border-slate-800 flex justify-between font-mono text-[11px] text-slate-400">
+                    <span>Burst: {{ burstNote.qty }} chests</span>
+                    <span class="text-cyan-300">{{ burstNote.rares }} special drops</span>
+                  </div>
+                </div>
+
+                <div v-else class="font-mono text-xs text-slate-500">
+                  [IDLE] Click chest or fire a burst to begin sampling.
+                </div>
+              </div>
+            </div>
+
+            <!-- Execution & Auto-Grind Controls -->
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-4 space-y-4">
+              <div class="grid grid-cols-3 gap-2.5 font-mono">
+                <button
+                  @click="openSingleChest"
+                  class="py-2.5 px-3 rounded-lg text-xs font-bold uppercase bg-amber-400 hover:bg-amber-300 text-slate-950 active:scale-[0.99] transition cursor-pointer"
+                >
+                  1× Open
+                </button>
+                <button
+                  @click="openBurst(10)"
+                  class="py-2.5 px-3 rounded-lg text-xs font-bold uppercase bg-[#0b0f17] hover:bg-slate-800 text-slate-200 border border-slate-700 active:scale-[0.99] transition cursor-pointer"
+                >
+                  10× Burst
+                </button>
+                <button
+                  @click="openBurst(100)"
+                  class="py-2.5 px-3 rounded-lg text-xs font-bold uppercase bg-[#0b0f17] hover:bg-slate-800 text-cyan-300 border border-cyan-500/40 active:scale-[0.99] transition cursor-pointer"
+                >
+                  100× Burst
+                </button>
+              </div>
+
+              <div class="pt-3 border-t border-slate-800">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-slate-400">
+                    Auto-Grind Throughput (Halts on Token)
+                  </span>
+                  <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      v-model="stopOnRare"
+                      class="rounded border-slate-700 bg-[#0b0f17] text-amber-400 focus:ring-0"
+                    />
+                    <span>Halt on any special drop</span>
+                  </label>
+                </div>
+
+                <div class="grid grid-cols-5 gap-2 font-mono">
+                  <button
+                    v-for="opt in speedOptions"
+                    :key="opt.rate"
+                    @click="autoRate = opt.rate"
+                    :class="[
+                      'py-2 px-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer',
+                      autoRate === opt.rate
+                        ? opt.rate === 0
+                          ? 'bg-slate-700 text-white'
+                          : 'bg-emerald-400 text-slate-950'
+                        : 'bg-[#0b0f17] text-slate-400 border border-slate-800 hover:text-slate-200'
+                    ]"
+                  >
+                    <span>{{ opt.label }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right 5 Columns: Telemetry, Loot Weights, Live Ledger -->
+          <div class="lg:col-span-5 flex flex-col gap-5">
+            <!-- Telemetry HUD -->
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-4">
+              <div class="font-mono text-[11px] uppercase tracking-wider text-slate-400 mb-3">
+                Session Telemetry
+              </div>
+
+              <div class="grid grid-cols-2 gap-2.5 font-mono">
+                <div class="bg-[#0b0f17] border border-slate-800 rounded-lg p-3">
+                  <div class="text-[10px] uppercase text-slate-400">Chests Opened</div>
+                  <div class="text-lg sm:text-xl font-bold text-white tabular-nums mt-0.5">
+                    {{ chestCount.toLocaleString() }}
+                  </div>
+                </div>
+
+                <div class="bg-[#0b0f17] border border-slate-800 rounded-lg p-3">
+                  <div class="text-[10px] uppercase text-slate-400">Pirate Tokens</div>
+                  <div class="text-lg sm:text-xl font-bold text-amber-300 tabular-nums mt-0.5">
+                    {{ counts.pirate_token }}
+                  </div>
+                </div>
+
+                <div class="bg-[#0b0f17] border border-slate-800 rounded-lg p-3">
+                  <div class="text-[10px] uppercase text-slate-400">Cumulative Odds</div>
+                  <div class="text-lg sm:text-xl font-bold text-cyan-300 tabular-nums mt-0.5">
+                    {{ formattedCumulativeOdds }}
+                  </div>
+                </div>
+
+                <div class="bg-[#0b0f17] border border-slate-800 rounded-lg p-3">
+                  <div class="text-[10px] uppercase text-slate-400">To 50/50 Flip</div>
+                  <div class="text-lg sm:text-xl font-bold text-slate-200 tabular-nums mt-0.5">
+                    {{ chestsRemainingToCoinFlip.toLocaleString() }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-3.5">
+                <div class="flex justify-between font-mono text-[11px] text-slate-400 mb-1">
+                  <span>50/50 Threshold Progress</span>
+                  <span class="tabular-nums">{{ coinFlipProgress.toFixed(1) }}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-[#0b0f17] rounded-full overflow-hidden border border-slate-800">
+                  <div
+                    class="h-full bg-amber-400 transition-all duration-150"
+                    :style="{ width: `${coinFlipProgress}%` }"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Loot Table Weights & Hit Counters -->
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-4">
+              <div class="flex items-center justify-between font-mono text-[11px] uppercase tracking-wider text-slate-400 mb-2.5">
+                <span>Loot Weights ({{ activeWindow.short }})</span>
+                <span>Rate // Hits</span>
+              </div>
+
+              <div class="space-y-1.5 font-mono text-xs">
+                <div
+                  v-for="row in lootTableRows"
+                  :key="row.id"
+                  class="flex items-center justify-between px-2.5 py-1.5 rounded bg-[#0b0f17] border border-slate-800/80"
+                >
+                  <span class="text-slate-200 truncate pr-2 font-sans">{{ row.label }}</span>
+                  <div class="flex items-center gap-2.5 shrink-0 tabular-nums">
+                    <span :class="row.color">{{ row.rate }}</span>
+                    <span
+                      :class="[
+                        'min-w-[2.5rem] text-right px-1.5 py-0.5 rounded text-[11px]',
+                        (counts[row.id] || 0) > 0 && row.id !== 'standard'
+                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                          : 'text-slate-500'
+                      ]"
+                    >
+                      {{ (counts[row.id] || 0).toLocaleString() }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Loot Ledger -->
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-4 flex-1 flex flex-col min-h-[210px]">
+              <div class="flex items-center justify-between font-mono text-[11px] uppercase tracking-wider text-slate-400 mb-2.5">
+                <span>Live Loot Ledger ({{ rareLog.length }})</span>
+                <span>Chest #</span>
+              </div>
+
+              <div
+                v-if="rareLog.length === 0"
+                class="flex-1 flex items-center justify-center border border-dashed border-slate-800 rounded-lg p-4 text-center font-mono text-xs text-slate-500"
+              >
+                No special items pulled yet.
+              </div>
+
+              <div v-else class="space-y-1.5 max-h-[230px] overflow-y-auto pr-1">
+                <div
+                  v-for="(item, idx) in rareLog"
+                  :key="`${item.index}-${idx}`"
+                  class="flex items-center justify-between gap-2 px-2.5 py-2 rounded bg-[#0b0f17] border border-slate-800"
+                >
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="px-1.5 py-0.5 rounded bg-amber-400/10 border border-amber-400/30 font-mono text-[10px] font-bold text-amber-300 shrink-0">
+                      {{ item.badge }}
+                    </span>
+                    <div class="min-w-0">
+                      <div class="text-xs font-bold text-slate-100 truncate">{{ item.name }}</div>
+                      <div class="font-mono text-[10px] text-slate-400">
+                        {{ tierStyles[item.tier].tag }} // {{ item.windowTag }}
+                      </div>
+                    </div>
+                  </div>
+                  <span class="font-mono text-xs text-amber-300 tabular-nums shrink-0">
+                    #{{ item.index.toLocaleString() }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- Multi-Stage Pirate Shop Access Token Cinematic Overlay -->
+        <div
+          v-if="tokenOverlay"
+          :class="[
+            'fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-[#070a10]/95 backdrop-blur-md select-none',
+            revealStep === 2 ? 'animate-[screenShock_0.35s_ease-out]' : ''
+          ]"
+        >
+          <div
+            :class="[
+              'absolute inset-0 transition-opacity duration-700 pointer-events-none',
+              revealStep >= 2 ? 'opacity-100' : 'opacity-35'
+            ]"
+            style="background: radial-gradient(circle at center, rgba(245,158,11,0.4) 0%, rgba(190,18,60,0.18) 45%, rgba(7,10,16,0.98) 85%)"
+          />
+
+          <div
+            v-if="revealStep === 2"
+            class="absolute w-28 h-28 rounded-full border-4 border-amber-300 pointer-events-none animate-[shockwaveExpand_1s_ease-out_forwards]"
+          />
+
+          <div
+            v-if="revealStep >= 2"
+            class="absolute w-[160vmax] h-[160vmax] pointer-events-none opacity-25 animate-[spinSlow_28s_linear_infinite]"
+            style="background: repeating-conic-gradient(from 0deg, rgba(251,191,36,0.5) 0deg 8deg, transparent 8deg 24deg)"
+          />
+
+          <div v-if="revealStep >= 2" class="absolute inset-0 pointer-events-none overflow-hidden">
+            <div
+              v-for="s in doubloonSparks"
+              :key="s.id"
+              class="absolute -top-6 rounded-full bg-gradient-to-br from-yellow-200 via-amber-400 to-rose-500 shadow-[0_0_8px_rgba(251,191,36,0.8)] animate-[doubloonFall_linear_infinite]"
+              :style="{
+                left: s.left,
+                width: `${s.size}px`,
+                height: `${s.size}px`,
+                animationDelay: s.delay,
+                animationDuration: s.dur
+              }"
+            />
+          </div>
+
+          <div class="relative z-10 flex flex-col items-center max-w-xl w-full px-4 text-center">
+            <div class="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded border border-amber-400/40 bg-amber-500/10 text-amber-300 font-mono text-xs tracking-widest uppercase">
+              <span v-if="revealStep === 1">SIGNAL DETECTED // UNLOCKING VAULT</span>
+              <span v-else-if="revealStep === 2">CRITICAL HIT // MYTHIC DROP</span>
+              <span v-else>PIRATE SHOP ACCESS TOKEN</span>
+            </div>
+
+            <!-- Stage 1-2: Shaking -> Bursting Chest -->
+            <div v-if="revealStep <= 2" class="my-4">
+              <div
+                :class="[
+                  'w-40 h-40 rounded-2xl border-2 flex flex-col items-center justify-center transition-all duration-300',
+                  revealStep === 1
+                    ? 'bg-amber-950/40 border-amber-400/60 animate-[chestShake_0.1s_infinite]'
+                    : 'bg-amber-400/25 border-amber-200 scale-125 shadow-[0_0_80px_rgba(251,191,36,0.9)]'
+                ]"
+              >
+                <span class="font-mono text-xs font-bold tracking-widest text-amber-200 uppercase">
+                  {{ revealStep === 1 ? 'VAULT LOCK' : 'BREACHED' }}
+                </span>
+                <span class="mt-2 font-mono text-3xl font-black text-amber-300">
+                  {{ revealStep === 1 ? '1 / 137.5K' : 'MYTHIC' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Stage 3+: Spinning Doubloon Coin & Pass Cards -->
+            <div v-if="revealStep >= 3" class="my-3 flex flex-col items-center animate-[tokenRise_0.75s_cubic-bezier(0.16,1,0.3,1)_forwards]">
+              <div class="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-gradient-to-br from-yellow-200 via-amber-400 to-rose-600 p-1.5 shadow-[0_0_65px_rgba(245,158,11,0.85)] border-2 border-yellow-100 animate-[floatSlow_3s_ease-in-out_infinite]">
+                <div class="w-full h-full rounded-full bg-[#111827] border-2 border-dashed border-amber-300/80 flex flex-col items-center justify-center relative overflow-hidden">
+                  <div class="absolute inset-0 bg-gradient-to-tr from-transparent via-white/30 to-transparent -translate-x-full animate-[shineSweep_2.2s_infinite]" />
+                  <svg viewBox="0 0 24 24" class="w-16 h-16 sm:w-20 sm:h-20 text-amber-300" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <circle cx="9" cy="12" r="1" /><circle cx="15" cy="12" r="1" />
+                    <path d="M8 20v2h8v-2" /><path d="m12.5 17-.5-1-.5 1h1z" />
+                    <path d="M16 20a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20" />
+                  </svg>
+                  <span class="mt-1 font-mono text-[10px] sm:text-xs font-bold tracking-widest text-amber-200 uppercase">
+                    ACCESS TOKEN
+                  </span>
+                </div>
+              </div>
+
+              <div class="mt-5 px-6 py-3 rounded-lg bg-gradient-to-r from-rose-600 via-amber-500 to-yellow-400 border border-yellow-100 shadow-2xl">
+                <h2 class="text-xl sm:text-3xl font-black tracking-tight text-slate-950 uppercase">
+                  Pirate Shop Access Granted
+                </h2>
+              </div>
+
+              <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-md text-left">
+                <div class="px-3.5 py-2.5 rounded-lg bg-[#111827] border border-amber-400/40">
+                  <div class="font-mono text-[11px] font-bold text-amber-300 uppercase">Pass #1 — 2026 Window</div>
+                  <div class="text-xs text-slate-300 mt-0.5">14-Day Exclusive Shop Access</div>
+                </div>
+                <div class="px-3.5 py-2.5 rounded-lg bg-[#111827] border border-amber-400/40">
+                  <div class="font-mono text-[11px] font-bold text-amber-300 uppercase">Pass #2 — 2027 Window</div>
+                  <div class="text-xs text-slate-300 mt-0.5">14-Day Exclusive Shop Access</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stage 4: Telemetry Summary & Resume -->
+            <div v-if="revealStep >= 4" class="mt-5 w-full max-w-md bg-[#111827] border border-slate-700 rounded-xl p-4 shadow-2xl animate-[fadeIn_0.3s_ease-out]">
+              <div class="grid grid-cols-2 gap-3 text-left mb-4 font-mono">
+                <div class="bg-[#0b0f17] rounded-lg p-3 border border-slate-800">
+                  <div class="text-[10px] uppercase text-slate-400">Chest Index</div>
+                  <div class="text-lg font-bold text-amber-300 tabular-nums">
+                    #{{ tokenOverlay.index.toLocaleString() }}
+                  </div>
+                </div>
+                <div class="bg-[#0b0f17] rounded-lg p-3 border border-slate-800">
+                  <div class="text-[10px] uppercase text-slate-400">Rate Window</div>
+                  <div class="text-lg font-bold text-cyan-300">{{ tokenOverlay.windowTag }}</div>
+                </div>
+              </div>
+
+              <p v-if="tokenOverlay.isPreview" class="text-xs font-mono text-amber-300/80 mb-3">
+                [PREVIEW MODE] Simulation roll only — not recorded in session telemetry.
+              </p>
+
+              <button
+                @click="dismissTokenOverlay"
+                class="w-full py-3 px-5 rounded-lg font-mono font-bold text-sm uppercase tracking-wider text-slate-950 bg-amber-400 hover:bg-amber-300 active:scale-[0.99] transition cursor-pointer"
+              >
+                Resume Session
+              </button>
+            </div>
+
+            <button
+              v-if="revealStep < 4"
+              @click="revealStep = 4"
+              class="mt-6 font-mono text-xs text-slate-400 hover:text-slate-200 underline underline-offset-4 cursor-pointer"
+            >
+              [Skip Animation]
+            </button>
+          </div>
+        </div>
+      </div>
+    </script>
+
+    <script>
+      const { createApp, ref, reactive, computed, watch, onMounted, onBeforeUnmount } = Vue;
+
+      // Base odds straight from Epic's Treasure Hunters disclosure.
+      // Every roll is an independent Bernoulli trial — no hidden pity counter exists.
+      const DROP_WINDOWS = {
+        normal: {
+          id: 'normal',
+          name: 'Standard Match (1×)',
+          short: '1× Base',
+          tokenMult: 1,
+          vehicleMult: 1,
+          outfitMult: 1,
+          oddsLabel: '1 in 137,500'
+        },
+        th_15: {
+          id: 'th_15',
+          name: 'Treasure Hour I (1.5×)',
+          short: '1.5× TH',
+          tokenMult: 1.5,
+          vehicleMult: 10,
+          outfitMult: 7.5,
+          oddsLabel: '1 in 91,667'
+        },
+        th_20: {
+          id: 'th_20',
+          name: 'Treasure Hour II (2×)',
+          short: '2× TH',
+          tokenMult: 2,
+          vehicleMult: 10,
+          outfitMult: 10,
+          oddsLabel: '1 in 68,750'
+        }
+      };
+
+      const SPECIAL_DROPS = {
+        pirate_token: [
+          { name: 'Pirate Shop Access Token', detail: '2× 14-Day Item Shop Passes (2026 & 2027)', badge: 'TKN' }
+        ],
+        gold_outfit: [
+          { name: 'Solid Gold A$AP Rocky', detail: 'Weekly Mythic Gold Outfit', badge: 'GLD' },
+          { name: 'Solid Gold Lil Uzi Vert', detail: 'Weekly Mythic Gold Outfit', badge: 'GLD' },
+          { name: 'Solid Gold Midas Rex', detail: 'Weekly Mythic Gold Outfit', badge: 'GLD' }
+        ],
+        vehicle: [
+          { name: 'Mercedes-AMG G 63 + Treasure Wrap', detail: 'Exotic SUV Body & Decal', badge: 'CAR' },
+          { name: 'Cadillac CT5-V Blackwing + Gold Wrap', detail: 'Performance Sedan & Decal', badge: 'CAR' }
+        ],
+        pickaxe: [
+          { name: 'Gilded Cutlass', detail: 'Weekly Harvesting Tool', badge: 'PCK' },
+          { name: 'Sovereign Anchor Blade', detail: 'Weekly Harvesting Tool', badge: 'PCK' },
+          { name: 'Cursed Doubloon Back Bling', detail: 'Reactive Gold Counter', badge: 'BLK' }
+        ],
+        jam_track: [
+          { name: 'High Seas Shanty (VIP)', detail: 'Weekly Jam Track', badge: 'JAM' },
+          { name: 'Gold Rush Anthem', detail: 'Weekly Jam Track', badge: 'JAM' },
+          { name: 'Crossbones Groove', detail: 'Weekly Jam Track', badge: 'JAM' }
+        ],
+        loading_screen: [
+          { name: 'Crossbones Isle Sunset', detail: 'Weekly Loading Screen', badge: 'IMG' },
+          { name: 'Vault of the Ancients', detail: 'Weekly Loading Screen', badge: 'IMG' },
+          { name: 'The Pirate Fleet Arrives', detail: 'Weekly Loading Screen', badge: 'IMG' }
+        ],
+        gizmo: [
+          { name: 'Sprite Locator', detail: 'Pings nearby Treasure Sprites', badge: 'GZM' },
+          { name: 'Lucky Locator', detail: 'Tracks unlooted high-tier chests', badge: 'GZM' },
+          { name: 'Golden Firework', detail: 'Flares buried stash locations', badge: 'GZM' },
+          { name: 'Extraction Accelerator', detail: '+50% Extraction speed', badge: 'GZM' },
+          { name: 'Portable Extractor', detail: 'Instant field loot extraction', badge: 'GZM' }
+        ]
+      };
+
+      const STANDARD_POOL = [
+        { name: 'Tactical Shotgun + Shells', rarity: 'Uncommon', badge: 'SHG', accent: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10' },
+        { name: 'Striker AR + Medium Ammo', rarity: 'Rare', badge: 'AR', accent: 'text-cyan-400 border-cyan-500/40 bg-cyan-500/10' },
+        { name: 'Heavy Impact Sniper', rarity: 'Epic', badge: 'SNP', accent: 'text-purple-400 border-purple-500/40 bg-purple-500/10' },
+        { name: 'Gold SCAR Assault Rifle', rarity: 'Legendary', badge: 'SCR', accent: 'text-amber-400 border-amber-500/40 bg-amber-500/10' },
+        { name: 'Big Shield Potion', rarity: 'Rare', badge: 'SHD', accent: 'text-cyan-400 border-cyan-500/40 bg-cyan-500/10' },
+        { name: 'Chug Splash (2×)', rarity: 'Rare', badge: 'CHG', accent: 'text-teal-400 border-teal-500/40 bg-teal-500/10' },
+        { name: '35 Gold Bars', rarity: 'Common', badge: 'BAR', accent: 'text-yellow-300 border-yellow-500/40 bg-yellow-500/10' }
+      ];
+
+      const TIER_STYLES = {
+        pirate_token: {
+          tag: 'MYTHIC TOKEN',
+          pill: 'bg-gradient-to-r from-rose-500 via-amber-400 to-yellow-300 text-slate-950 font-black',
+          card: 'border-amber-400/80 bg-amber-950/20 shadow-[0_0_28px_rgba(251,191,36,0.28)]'
+        },
+        gold_outfit: {
+          tag: 'GOLD OUTFIT',
+          pill: 'bg-amber-400 text-slate-950 font-black',
+          card: 'border-amber-400/60 bg-amber-950/15'
+        },
+        vehicle: {
+          tag: 'VEHICLE BUNDLE',
+          pill: 'bg-purple-500 text-white font-bold',
+          card: 'border-purple-400/50 bg-purple-950/15'
+        },
+        pickaxe: {
+          tag: 'COSMETIC GEAR',
+          pill: 'bg-cyan-400 text-slate-950 font-bold',
+          card: 'border-cyan-400/50 bg-cyan-950/15'
+        },
+        jam_track: {
+          tag: 'JAM TRACK',
+          pill: 'bg-teal-400 text-slate-950 font-bold',
+          card: 'border-teal-400/40 bg-teal-950/15'
+        },
+        loading_screen: {
+          tag: 'LOADING SCREEN',
+          pill: 'bg-blue-500 text-white font-bold',
+          card: 'border-blue-400/40 bg-blue-950/15'
+        },
+        gizmo: {
+          tag: 'TREASURE GIZMO',
+          pill: 'bg-cyan-400 text-slate-950 font-bold',
+          card: 'border-cyan-400/40 bg-cyan-950/15'
+        }
+      };
+
+      // Web Audio API because bundling 400kb of mp3s for a chest latch is goofy.
+      class SynthAudio {
+        constructor() {
+          this.ctx = null;
+          this.muted = false;
+        }
+
+        boot() {
+          if (this.muted) return null;
+          if (!this.ctx) {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (Ctx) this.ctx = new Ctx();
+          }
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+          }
+          return this.ctx;
+        }
+
+        play(cue) {
+          const ctx = this.boot();
+          if (!ctx) return;
+          const t = ctx.currentTime;
+
+          if (cue === 'thud') {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const filter = ctx.createBiquadFilter();
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(132, t);
+            osc.frequency.exponentialRampToValueAtTime(220, t + 0.07);
+            osc.frequency.exponentialRampToValueAtTime(155, t + 0.14);
+
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(520, t);
+            filter.Q.setValueAtTime(4.5, t);
+
+            gain.gain.setValueAtTime(0.001, t);
+            gain.gain.linearRampToValueAtTime(0.055, t + 0.025);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.16);
+            return;
+          }
+
+          if (cue === 'standard') {
+            [440, 554.37, 659.25, 880].forEach((freq, i) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = i % 2 === 0 ? 'triangle' : 'sine';
+              osc.frequency.setValueAtTime(freq * 0.97, t);
+              osc.frequency.exponentialRampToValueAtTime(freq, t + 0.12);
+
+              gain.gain.setValueAtTime(0.0001, t);
+              gain.gain.linearRampToValueAtTime(0.038 / (i * 0.35 + 1), t + 0.03);
+              gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
+
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(t + i * 0.012);
+              osc.stop(t + 0.38);
+            });
+            return;
+          }
+
+          if (cue === 'rare') {
+            [587.33, 739.99, 880, 1174.66, 1479.98].forEach((freq, i) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(freq, t + i * 0.048);
+
+              gain.gain.setValueAtTime(0.0001, t + i * 0.048);
+              gain.gain.linearRampToValueAtTime(0.08, t + i * 0.048 + 0.02);
+              gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.048 + 0.48);
+
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(t + i * 0.048);
+              osc.stop(t + i * 0.048 + 0.52);
+            });
+            return;
+          }
+
+          if (cue === 'token') {
+            // Sub-bass tension swell -> shockwave boom -> brassy triad fanfare
+            const sub = ctx.createOscillator();
+            const subGain = ctx.createGain();
+            const lp = ctx.createBiquadFilter();
+
+            sub.type = 'sawtooth';
+            sub.frequency.setValueAtTime(40, t);
+            sub.frequency.exponentialRampToValueAtTime(96, t + 1.45);
+            lp.type = 'lowpass';
+            lp.frequency.setValueAtTime(130, t);
+            lp.frequency.exponentialRampToValueAtTime(920, t + 1.45);
+
+            subGain.gain.setValueAtTime(0.01, t);
+            subGain.gain.linearRampToValueAtTime(0.2, t + 1.35);
+            subGain.gain.exponentialRampToValueAtTime(0.0001, t + 1.55);
+
+            sub.connect(lp);
+            lp.connect(subGain);
+            subGain.connect(ctx.destination);
+            sub.start(t);
+            sub.stop(t + 1.6);
+
+            const impactAt = t + 1.48;
+            const boom = ctx.createOscillator();
+            const boomGain = ctx.createGain();
+            boom.type = 'sine';
+            boom.frequency.setValueAtTime(145, impactAt);
+            boom.frequency.exponentialRampToValueAtTime(30, impactAt + 0.85);
+            boomGain.gain.setValueAtTime(0.3, impactAt);
+            boomGain.gain.exponentialRampToValueAtTime(0.0001, impactAt + 0.9);
+            boom.connect(boomGain);
+            boomGain.connect(ctx.destination);
+            boom.start(impactAt);
+            boom.stop(impactAt + 0.95);
+
+            const notes = [
+              { f: 293.66, d: 1.5, len: 0.26 },
+              { f: 369.99, d: 1.75, len: 0.26 },
+              { f: 440.0, d: 2.0, len: 0.32 },
+              { f: 587.33, d: 2.32, len: 1.4 },
+              { f: 739.99, d: 2.32, len: 1.4 },
+              { f: 880.0, d: 2.5, len: 1.6 },
+              { f: 1174.66, d: 3.45, len: 2.0 }
+            ];
+
+            notes.forEach(({ f, d, len }) => {
+              const o1 = ctx.createOscillator();
+              const o2 = ctx.createOscillator();
+              const g = ctx.createGain();
+              const fLP = ctx.createBiquadFilter();
+
+              o1.type = 'sawtooth';
+              o2.type = 'triangle';
+              o1.frequency.setValueAtTime(f, t + d);
+              o2.frequency.setValueAtTime(f * 1.003, t + d);
+              fLP.type = 'lowpass';
+              fLP.frequency.setValueAtTime(2300, t + d);
+
+              g.gain.setValueAtTime(0.0001, t + d);
+              g.gain.linearRampToValueAtTime(0.085, t + d + 0.035);
+              g.gain.exponentialRampToValueAtTime(0.0001, t + d + len);
+
+              o1.connect(fLP);
+              o2.connect(fLP);
+              fLP.connect(g);
+              g.connect(ctx.destination);
+              o1.start(t + d);
+              o2.start(t + d);
+              o1.stop(t + d + len + 0.05);
+              o2.stop(t + d + len + 0.05);
+            });
+          }
+        }
+      }
+
+      const audio = new SynthAudio();
+
+      // yes, i know Math.random isn't cryptographically secure, chill
+      function rollChestDrop(windowId, index) {
+        const cfg = DROP_WINDOWS[windowId] || DROP_WINDOWS.normal;
+        const r = Math.random();
+        let acc = 0;
+
+        const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+
+        acc += (1 / 1562500) * cfg.outfitMult;
+        if (r < acc) return { isSpecial: true, tier: 'gold_outfit', ...pick(SPECIAL_DROPS.gold_outfit), index, windowTag: cfg.short };
+
+        acc += (1 / 137500) * cfg.tokenMult;
+        if (r < acc) return { isSpecial: true, tier: 'pirate_token', ...SPECIAL_DROPS.pirate_token[0], index, windowTag: cfg.short };
+
+        acc += (1 / 7813) * cfg.vehicleMult;
+        if (r < acc) return { isSpecial: true, tier: 'vehicle', ...pick(SPECIAL_DROPS.vehicle), index, windowTag: cfg.short };
+
+        acc += 1 / 568;
+        if (r < acc) return { isSpecial: true, tier: 'pickaxe', ...pick(SPECIAL_DROPS.pickaxe), index, windowTag: cfg.short };
+
+        acc += 1 / 391;
+        if (r < acc) return { isSpecial: true, tier: 'jam_track', ...pick(SPECIAL_DROPS.jam_track), index, windowTag: cfg.short };
+
+        acc += 1 / 272;
+        if (r < acc) return { isSpecial: true, tier: 'loading_screen', ...pick(SPECIAL_DROPS.loading_screen), index, windowTag: cfg.short };
+
+        acc += 1 / 127;
+        if (r < acc) return { isSpecial: true, tier: 'gizmo', ...pick(SPECIAL_DROPS.gizmo), index, windowTag: cfg.short };
+
+        return {
+          isSpecial: false,
+          tier: 'standard',
+          ...pick(STANDARD_POOL),
+          index,
+          windowTag: cfg.short
+        };
+      }
+
+      createApp({
+        template: '#app-template',
+        setup() {
+          const activeTab = ref('sim');
+          const windowId = ref('normal');
+          const chestCount = ref(0);
+          const phase = ref('idle');
+          const aura = ref('std');
+          const currentDrop = ref(null);
+          const burstNote = ref(null);
+          const rareLog = ref([]);
+          const tokenOverlay = ref(null);
+          const revealStep = ref(1);
+
+          const autoRate = ref(0); // 0, 10, 100, 500, 2500
+          const stopOnRare = ref(false);
+          const muted = ref(false);
+
+          const counts = reactive({
+            pirate_token: 0,
+            gold_outfit: 0,
+            vehicle: 0,
+            pickaxe: 0,
+            jam_track: 0,
+            loading_screen: 0,
+            gizmo: 0,
+            standard: 0
+          });
+
+          let isOpeningLock = false;
+          let rafHandle = null;
+          let revealTimers = [];
+
+          watch(muted, (val) => {
+            audio.muted = val;
+          });
+
+          const windowOptions = Object.values(DROP_WINDOWS);
+          const tierStyles = TIER_STYLES;
+          const speedOptions = [
+            { rate: 0, label: 'Stop' },
+            { rate: 10, label: '10/s' },
+            { rate: 100, label: '100/s' },
+            { rate: 500, label: '500/s' },
+            { rate: 2500, label: '2,500/s' }
+          ];
+
+          const doubloonSparks = Array.from({ length: 36 }, (_, idx) => ({
+            id: idx,
+            left: `${(idx * 23 + 11) % 100}%`,
+            delay: `${(idx % 10) * 0.15}s`,
+            dur: `${2.1 + (idx % 4) * 0.35}s`,
+            size: 8 + (idx % 3) * 4
+          }));
+
+          const activeWindow = computed(() => DROP_WINDOWS[windowId.value]);
+          const pToken = computed(() => (1 / 137500) * activeWindow.value.tokenMult);
+
+          const cumulativeOdds = computed(() => {
+            if (chestCount.value <= 0) return 0;
+            // expm1/log1p keeps IEEE-754 precision intact when p is tiny
+            const prob = -Math.expm1(chestCount.value * Math.log1p(-pToken.value));
+            return Math.min(99.9999, prob * 100);
+          });
+
+          const formattedCumulativeOdds = computed(() => {
+            if (cumulativeOdds.value < 0.01 && chestCount.value > 0) {
+              return `${cumulativeOdds.value.toFixed(4)}%`;
+            }
+            return `${cumulativeOdds.value.toFixed(2)}%`;
+          });
+
+          const coinFlipTarget = computed(() => Math.round(Math.log(0.5) / Math.log1p(-pToken.value)));
+          const chestsRemainingToCoinFlip = computed(() => Math.max(0, coinFlipTarget.value - chestCount.value));
+          const coinFlipProgress = computed(() => Math.min(100, (chestCount.value / coinFlipTarget.value) * 100));
+
+          const isChestOpen = computed(() =>
+            phase.value === 'open_std' || phase.value === 'open_rare' || phase.value === 'open_gold'
+          );
+
+          const rayGradientClass = computed(() => {
+            if (aura.value === 'gold') return 'from-amber-200 via-amber-400/70 to-transparent';
+            if (aura.value === 'rare') return 'from-cyan-200 via-sky-400/65 to-transparent';
+            return 'from-yellow-100 via-amber-300/45 to-transparent';
+          });
+
+          const lootTableRows = computed(() => {
+            const w = activeWindow.value;
+            return [
+              { id: 'pirate_token', label: 'Pirate Shop Token', rate: w.oddsLabel, color: 'text-amber-300 font-bold' },
+              { id: 'gold_outfit', label: 'Weekly Gold Outfit', rate: `1 in ${Math.round(1562500 / w.outfitMult).toLocaleString()}`, color: 'text-amber-200' },
+              { id: 'vehicle', label: 'Vehicle + Wrap', rate: `1 in ${Math.round(7813 / w.vehicleMult).toLocaleString()}`, color: 'text-purple-300' },
+              { id: 'pickaxe', label: 'Pickaxe / Back Bling', rate: '1 in 568', color: 'text-cyan-300' },
+              { id: 'jam_track', label: 'Weekly Jam Track', rate: '1 in 391', color: 'text-teal-300' },
+              { id: 'loading_screen', label: 'Loading Screen', rate: '1 in 272', color: 'text-blue-300' },
+              { id: 'gizmo', label: 'Treasure Gizmo', rate: '1 in 127', color: 'text-cyan-300' },
+              { id: 'standard', label: 'Standard BR Loot', rate: '~98.4%', color: 'text-slate-400' }
+            ];
+          });
+
+          function clearRevealTimers() {
+            revealTimers.forEach(clearTimeout);
+            revealTimers = [];
+          }
+
+          function launchTokenReveal(drop) {
+            clearRevealTimers();
+            autoRate.value = 0;
+            phase.value = 'open_gold';
+            aura.value = 'gold';
+            revealStep.value = 1;
+            tokenOverlay.value = drop;
+            audio.play('token');
+
+            revealTimers = [
+              setTimeout(() => { revealStep.value = 2; }, 1480),
+              setTimeout(() => { revealStep.value = 3; }, 3150),
+              setTimeout(() => { revealStep.value = 4; }, 5100)
+            ];
+          }
+
+          function dismissTokenOverlay() {
+            clearRevealTimers();
+            tokenOverlay.value = null;
+          }
+
+          function triggerTestTokenDrop() {
+            launchTokenReveal({
+              isSpecial: true,
+              isPreview: true,
+              tier: 'pirate_token',
+              name: 'Pirate Shop Access Token',
+              badge: 'TKN',
+              index: chestCount.value || 1,
+              windowTag: activeWindow.value.short
+            });
+          }
+
+          function openSingleChest() {
+            if (tokenOverlay.value || isOpeningLock) return;
+            isOpeningLock = true;
+            burstNote.value = null;
+
+            const nextIdx = chestCount.value + 1;
+            const drop = rollChestDrop(windowId.value, nextIdx);
+
+            if (drop.tier === 'pirate_token') {
+              chestCount.value = nextIdx;
+              currentDrop.value = drop;
+              counts.pirate_token += 1;
+              rareLog.value = [drop, ...rareLog.value].slice(0, 60);
+              isOpeningLock = false;
+              launchTokenReveal(drop);
+              return;
+            }
+
+            phase.value = 'shaking';
+            audio.play('thud');
+
+            setTimeout(() => {
+              chestCount.value = nextIdx;
+              currentDrop.value = drop;
+              counts[drop.tier] = (counts[drop.tier] || 0) + 1;
+
+              if (drop.isSpecial) {
+                phase.value = 'open_rare';
+                aura.value = 'rare';
+                rareLog.value = [drop, ...rareLog.value].slice(0, 60);
+                audio.play('rare');
+              } else {
+                phase.value = 'open_std';
+                aura.value = 'std';
+                audio.play('standard');
+              }
+              isOpeningLock = false;
+            }, 135);
+          }
+
+          function openBurst(qty) {
+            if (tokenOverlay.value) return;
+            let idx = chestCount.value;
+            const foundRares = [];
+            let tail = null;
+            let hitToken = null;
+
+            for (let i = 0; i < qty; i++) {
+              idx += 1;
+              const d = rollChestDrop(windowId.value, idx);
+              tail = d;
+              counts[d.tier] = (counts[d.tier] || 0) + 1;
+
+              if (d.isSpecial) {
+                foundRares.push(d);
+                if (d.tier === 'pirate_token') {
+                  hitToken = d;
+                  break;
+                }
+              }
+            }
+
+            chestCount.value = idx;
+            if (foundRares.length) {
+              rareLog.value = [...foundRares.reverse(), ...rareLog.value].slice(0, 60);
+            }
+
+            if (hitToken) {
+              currentDrop.value = hitToken;
+              launchTokenReveal(hitToken);
+              return;
+            }
+
+            currentDrop.value = foundRares[foundRares.length - 1] || tail;
+            burstNote.value = { qty, rares: foundRares.length };
+
+            if (foundRares.length) {
+              phase.value = 'open_rare';
+              aura.value = 'rare';
+              audio.play('rare');
+            } else {
+              phase.value = 'open_std';
+              aura.value = 'std';
+              audio.play('standard');
+            }
+          }
+
+          // Delta-time rAF accumulator so 2,500/s doesn't choke Vue reactivity
+          function stopLoop() {
+            if (rafHandle !== null) {
+              cancelAnimationFrame(rafHandle);
+              rafHandle = null;
+            }
+          }
+
+          watch([autoRate, tokenOverlay, activeTab], ([rate, overlay, tab]) => {
+            stopLoop();
+            if (!rate || overlay || tab !== 'sim') return;
+
+            let lastTs = performance.now();
+            let carry = 0;
+
+            const tick = (now) => {
+              const dt = Math.min(0.1, (now - lastTs) / 1000);
+              lastTs = now;
+              carry += autoRate.value * dt;
+
+              const batch = Math.floor(carry);
+              if (batch > 0) {
+                carry -= batch;
+                let idx = chestCount.value;
+                const foundRares = [];
+                let tail = null;
+                let hitToken = null;
+
+                for (let i = 0; i < batch; i++) {
+                  idx += 1;
+                  const d = rollChestDrop(windowId.value, idx);
+                  tail = d;
+                  counts[d.tier] = (counts[d.tier] || 0) + 1;
+
+                  if (d.isSpecial) {
+                    foundRares.push(d);
+                    if (d.tier === 'pirate_token') {
+                      hitToken = d;
+                      break;
+                    }
+                  }
+                }
+
+                chestCount.value = idx;
+
+                if (foundRares.length) {
+                  rareLog.value = [...foundRares.reverse(), ...rareLog.value].slice(0, 60);
+                  currentDrop.value = foundRares[foundRares.length - 1];
+                  phase.value = 'open_rare';
+                  aura.value = 'rare';
+                  audio.play('rare');
+
+                  if (stopOnRare.value && !hitToken) {
+                    autoRate.value = 0;
+                    return;
+                  }
+                } else if (tail) {
+                  currentDrop.value = tail;
+                  phase.value = phase.value === 'open_std' ? 'open_rare' : 'open_std';
+                  aura.value = 'std';
+                }
+
+                if (hitToken) {
+                  launchTokenReveal(hitToken);
+                  return;
+                }
+              }
+
+              rafHandle = requestAnimationFrame(tick);
+            };
+
+            rafHandle = requestAnimationFrame(tick);
+          });
+
+          function handleKeydown(e) {
+            if (
+              e.code === 'Space' &&
+              activeTab.value === 'sim' &&
+              !tokenOverlay.value &&
+              document.activeElement?.tagName !== 'BUTTON'
+            ) {
+              e.preventDefault();
+              openSingleChest();
+            }
+          }
+
+          function switchToMathTab() {
+            if (autoRate.value) autoRate.value = 0;
+            activeTab.value = 'math';
+          }
+
+          function resetSession() {
+            autoRate.value = 0;
+            chestCount.value = 0;
+            phase.value = 'idle';
+            aura.value = 'std';
+            currentDrop.value = null;
+            burstNote.value = null;
+            rareLog.value = [];
+            Object.keys(counts).forEach((k) => {
+              counts[k] = 0;
+            });
+          }
+
+          onMounted(() => {
+            window.addEventListener('keydown', handleKeydown);
+          });
+
+          onBeforeUnmount(() => {
+            stopLoop();
+            clearRevealTimers();
+            window.removeEventListener('keydown', handleKeydown);
+          });
+
+          return {
+            activeTab,
+            windowId,
+            windowOptions,
+            activeWindow,
+            chestCount,
+            phase,
+            aura,
+            isChestOpen,
+            rayGradientClass,
+            currentDrop,
+            burstNote,
+            rareLog,
+            tokenOverlay,
+            revealStep,
+            doubloonSparks,
+            autoRate,
+            stopOnRare,
+            muted,
+            counts,
+            tierStyles,
+            speedOptions,
+            lootTableRows,
+            formattedCumulativeOdds,
+            chestsRemainingToCoinFlip,
+            coinFlipProgress,
+            openSingleChest,
+            openBurst,
+            triggerTestTokenDrop,
+            dismissTokenOverlay,
+            switchToMathTab,
+            resetSession
+          };
+        }
+      }).mount('#app');
+    </script>
+  </body>
+</html>
